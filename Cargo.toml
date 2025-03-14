@@ -1,0 +1,11 @@
+[package]
+name = "bml_grapher"
+version = "0.1.0"
+edition = "2021"
+
+description = "A library for graphing functions, plots, and other things probably.\nIt's a wrapper over piston_window for drawing functions with similar syntax to canvas in JS."
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+minifb = "0.27.0"
