@@ -394,7 +394,7 @@ impl Ctx {
     pub fn plot_dataset(&mut self, points: &Vec<Vec<f32>>, scale: usize, color: u32, offset: usize, border_offsets: [f32;4] ) {
         for point in points {
             let point = Vec2D::new(point[0] as f32, point[1] as f32);
-            self.plot_on_graph(point, scale, color, offset, border_offsets)
+            self.plot_on_graph(point, scale, color, offset, border_offsets);
         }
     }
 }
