@@ -1,5 +1,6 @@
 To get started, first add a SnorfWindow
 
+```rust
 let mut window =  SnorfWindow::new("Grapher", 480,540, None);
 let mut ctx = window.get_context();
 while window.is_open() {
@@ -10,4 +11,5 @@ while window.is_open() {
     }
     window.update(&ctx).unwrap();
 }
+```
 
