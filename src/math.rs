@@ -51,6 +51,10 @@ impl Vec2D<f32> {  // Bonus functions for real numbers
             f32::sin(t)*self.x + f32::cos(t)*self.y
         )
     } 
+
+    pub fn to_usize_vec(&self) -> Vec2D<usize> {
+        Vec2D::new(self.x as usize, self.y as usize)
+    }
     
 }
 
