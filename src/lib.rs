@@ -32,7 +32,7 @@ impl SnorfWindow {
     /// let mut ctx = window.get_context();
     /// // 3) <Optional change settings>: window.window.set_...
     /// while window.is_open() {
-    ///     ctx.clear_rect();
+    ///     ctx.clear_rect(0x000000);
     /// 
     ///     for i in 10..200 {
     ///         ctx.draw_pixel(i, 10, 0xff0800);
@@ -382,7 +382,7 @@ impl Ctx {
 
     /// offset = the axis offset
     /// border_offsets = the ranges used in the plot  [xmin, xmax, ymin, ymax ]
-    pub fn plot_on_graph(&mut self, point: Vec2D<f32>, scale:usize, color: u32, offset: usize, border_offsets: [f32;4]) -> Result<(), String>{
+    pub fn plot_on_graph(&mut self, point: &Vec2D<f32>, scale:usize, color: u32, offset: usize, border_offsets: [f32;4]) -> Result<(), String>{
         let h =self.h; let w = self.w;
         let new_x = Self::to_window_space(h, w, false, point.x, border_offsets, offset);
         let new_y = Self::to_window_space(h, w, true, point.y, border_offsets, offset);
@@ -394,7 +394,7 @@ impl Ctx {
     pub fn plot_dataset(&mut self, points: &Vec<Vec<f32>>, scale: usize, color: u32, offset: usize, border_offsets: [f32;4] ) {
         for point in points {
             let point = Vec2D::new(point[0] as f32, point[1] as f32);
-            self.plot_on_graph(point, scale, color, offset, border_offsets);
+            self.plot_on_graph(&point, scale, color, offset, border_offsets).unwrap();
         }
     }
 }
