@@ -6,8 +6,6 @@ readme = "README.md"
 
 
 license = "MIT OR Apache-2.0"
-
-
 description = "A library for graphing functions, plots, and other things probably.\nIt's a wrapper over minifb for drawing functions with similar syntax to canvas in JS."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

@@ -124,7 +124,7 @@ impl Ctx {
         let len = self.buf.len();
 
 
-        if x > self.w || y > self.h  || len < (y+1) * self.w{
+        if x > self.w || y > self.h  ||  x  >= (y+1) * self.w  || len < (y+1) * self.w {
             Err(format!("Attempted to access ({x},{y}) when dimensions are ({},{})",self.w,self.h))
         }else {
             let idx = (len- (y+1)*self.w) + x;
@@ -158,20 +158,22 @@ impl Ctx {
     /// Draws a line, using brezenheimer algorithm for speeeed because it avoids float calculations
     /// 
     /// It's kinda bad at doing thick lines, I don't really know how to do that properly so I used a hacky method.
-    pub fn draw_line(&mut self, start: &Vec2D<usize>, end: &Vec2D<usize>, color: u32) {
+    pub fn draw_line(&mut self, start: &Vec2D<usize>, end: &Vec2D<usize>, color: u32) -> Result<(), String> {
         const PIXEL_SCALE:usize = 1;
 
         let thickness = self.thickness.clone();
         let [x0, y0, x1, y1] = [start.x as i32, start.y as i32, end.x as i32, end.y as i32];
-
-        let mut draw_single_line = |x0: i32, y0: i32, x1: i32, y1: i32| { // x0,y0 is the start position
+        
+        let mut draw_single_line = |x0: i32, y0: i32, x1: i32, y1: i32| -> Result<(), String> { // x0,y0 is the start position
             let mut x:i32 = x0; let mut y:i32 = y0 as i32;
             let dx = (x1 - x0).abs();   let sx = if x0<x1{1} else{-1}; // how it increments
             let dy = - (y1 - y0).abs(); let sy = if y0<y1{1} else{-1};
             let mut error = dx+dy;
     
             loop {
-                self.draw_scaled_pixel(x as usize,y as usize, PIXEL_SCALE, color).unwrap();
+                if x > 0 && y > 0 {
+                    let _ = self.draw_scaled_pixel(x as usize,y as usize, PIXEL_SCALE, color);
+                }
                 if x==x1 && y==y1 {break}
                 let e2 = 2*error;
     
@@ -186,6 +188,7 @@ impl Ctx {
                     y+=sy;
                 }
             }
+            Ok(())
         };
 
         // Thicken up the line
@@ -198,7 +201,7 @@ impl Ctx {
             let start = Vec2D::new(x0 as f32, y0 as f32);
             let end = Vec2D::new(x1 as f32, y1 as f32);
 
-            draw_single_line(x0, y0, x1, y1);
+            let _ = draw_single_line(x0, y0, x1, y1);
             for _ in 1..thickness {
                 let norm_scaled = norm.with_magnitude(norm_size);
                 let start_1 = start.add_vec(&norm_scaled);
@@ -207,15 +210,17 @@ impl Ctx {
                 let end_1 = end.add_vec(&norm_scaled);
                 let end_2 = end.sub_vec(&norm_scaled);
 
-                draw_single_line(start_1.x as i32, start_1.y as i32, end_1.x as i32, end_1.y as i32);
-                draw_single_line(start_2.x as i32, start_2.y as i32, end_2.x as i32, end_2.y as i32);
+                let _ = draw_single_line(start_1.x as i32, start_1.y as i32, end_1.x as i32, end_1.y as i32);
+                let _ = draw_single_line(start_2.x as i32, start_2.y as i32, end_2.x as i32, end_2.y as i32);
 
 
                 norm_size += 0.5;
             }
         }else {
-            draw_single_line(x0, y0, x1, y1);
+            let _ = draw_single_line(x0, y0, x1, y1);
         }
+
+        Ok(())
 
         
     }
@@ -237,8 +242,38 @@ impl Ctx {
         let text_obj = Text::new(self.w, self.h, scale, true);
         text_obj.draw(&mut self.buf, (pos.x, self.h-pos.y), text);
     }
+}
 
-    //--------------------------- Graph stuff
+//*----------------------------------------- */
+//*------------Graph Ctx-------------------- */
+//*----------------------------------------- */
+//
+
+pub struct GraphSettings {
+    axis_offset: usize,
+    min_xnum: f32,
+    max_xnum: f32,
+    min_ynum: f32,
+    max_ynum: f32,
+}
+impl GraphSettings {
+    pub fn new(axis_offset: usize, min_xnum:f32, max_xnum:f32, min_ynum:f32, max_ynum:f32) -> Self {
+        GraphSettings{axis_offset, min_xnum, max_xnum, min_ynum, max_ynum}
+    }
+    pub fn get_border_offsets(&self) -> [f32; 4] {
+        [self.min_xnum, self.max_xnum, self.min_ynum, self.max_ynum]
+    }
+}
+
+// This is a wrapper around ctx that is able to draw graphs on said ctx.
+pub struct GraphCtx<'a> {
+    pub ctx: &'a mut Ctx,
+    settings: GraphSettings,
+}
+impl<'a> GraphCtx<'a> {
+    pub fn new(ctx: &'a mut Ctx, settings: GraphSettings) -> Self {
+        GraphCtx { ctx, settings}
+    }
     /// draws a y/x-axis, 
     /// offset= how far away the axis is from the screen edge
     /// screen_dim = dimensions of the screen [WIDTH, HEIGHT]
@@ -246,8 +281,11 @@ impl Ctx {
     /// step = how much the numbers increment
     /// min_num = the starting number
     /// max_num = the final number
-    pub fn draw_axis(&mut self, y_axis: bool, offset: usize,  num_offset: usize, step: f32, min_num: f32, max_num: f32 ) {
-        let [w,h] = [self.w, self.h];
+    pub fn draw_axis(&mut self, y_axis: bool, step: f32, min_num: f32, max_num: f32 ) {
+        let [w,h] = [self.ctx.w, self.ctx.h];
+        let offset = self.settings.axis_offset;
+        let num_offset = offset / 2;
+        
 
         if y_axis {
             let end_point = Vec2D::new(offset,h-offset);
@@ -258,18 +296,18 @@ impl Ctx {
                 let text_pos = Vec2D::new(offset - num_offset as usize, y);
                 // Draw grid line
                 if y > offset {
-                    self.draw_line(&text_pos, &Vec2D::new(w-offset, text_pos.y), Hex::from_word("grey"));
+                    self.ctx.draw_line(&text_pos, &Vec2D::new(w-offset, text_pos.y), Hex::from_word("grey"));
                 }
                 
-                self.draw_text(&text_pos, &curr_num.to_string(), 1);
+                self.ctx.draw_text(&text_pos, &curr_num.to_string(), 1);
 
                 curr_num += step;
             }
 
             // Y axis
-            self.draw_line(&Vec2D::new(offset,offset), &end_point, 0x000000);
+            self.ctx.draw_line(&Vec2D::new(offset,offset), &end_point, 0x000000);
             //  Y text
-            self.draw_text(&[offset/2,h-offset/2].into(), "Y", 1);
+            self.ctx.draw_text(&[offset/2,h-offset/2].into(), "Y", 1);
         
         }else {
             let pix_step =  (step * (w-2*offset) as f32 / (max_num - min_num))  as usize; 
@@ -279,16 +317,16 @@ impl Ctx {
                 let text_pos = Vec2D::new(x,offset - num_offset as usize);
                 // Draw grid line
                 if x > offset {
-                    self.draw_line(&text_pos, &Vec2D::new(text_pos.x, h-offset), Hex::from_word("grey"));
+                    self.ctx.draw_line(&text_pos, &Vec2D::new(text_pos.x, h-offset), Hex::from_word("grey"));
                 }
-                self.draw_text(&text_pos, &curr_num.to_string(), 1);
+                self.ctx.draw_text(&text_pos, &curr_num.to_string(), 1);
                 
                 curr_num += step;
             }
             // X axis
-            self.draw_line(&Vec2D::new(offset,offset), &Vec2D::new(w-offset, offset), 0x000000);
+            self.ctx.draw_line(&Vec2D::new(offset,offset), &Vec2D::new(w-offset, offset), 0x000000);
             // X text
-            self.draw_text(&[w-offset/2,offset].into(), "X", 1);
+            self.ctx.draw_text(&[w-offset/2,offset].into(), "X", 1);
         }
     }
 
@@ -327,7 +365,7 @@ impl Ctx {
 
     // step = How many times it steps, by default it steps by 1 meaening each pixel
     pub fn draw_graph<F: Fn(f32) -> f32 >(&mut self, f: F, step: usize, offset: usize, min_xnum : f32, max_xnum: f32, min_ynum: f32, max_ynum: f32, color: u32 ) {
-        let h: usize = self.h; let w = self.w;
+        let h: usize = self.ctx.h; let w = self.ctx.w;
 
         let to_number_space = |is_y_component: bool, n: usize| -> f32 {
             Self::to_number_space(h,w,is_y_component, n, [min_xnum, max_xnum, min_ynum,max_ynum], offset)
@@ -358,16 +396,16 @@ impl Ctx {
 
                 if let Some(pp) = &prev_point {
                     if point.distance(pp) > 2 {
-                        let prev_thickness = self.thickness;
-                        self.set_thickness(prev_thickness *2);
-                        self.draw_line(&Vec2D::new(pp.x as usize, pp.y as usize), &Vec2D::new(point.x as usize, point.y as usize), color);
-                        self.set_thickness(prev_thickness);
+                        let prev_thickness = self.ctx.thickness;
+                        self.ctx.set_thickness(prev_thickness *2);
+                        self.ctx.draw_line(&Vec2D::new(pp.x as usize, pp.y as usize), &Vec2D::new(point.x as usize, point.y as usize), color);
+                        self.ctx.set_thickness(prev_thickness);
                     }else {
-                        let _ = self.draw_scaled_pixel(wx, wy, self.thickness, color);
+                        let _ = self.ctx.draw_scaled_pixel(wx, wy, self.ctx.thickness, color);
                     }
                     prev_point = Some(point);
                 }else {
-                    let _ = self.draw_scaled_pixel(wx, wy, self.thickness , color);
+                    let _ = self.ctx.draw_scaled_pixel(wx, wy, self.ctx.thickness , color);
                     prev_point = Some(point);
                 }
 
@@ -382,22 +420,27 @@ impl Ctx {
 
     /// offset = the axis offset
     /// border_offsets = the ranges used in the plot  [xmin, xmax, ymin, ymax ]
-    pub fn plot_on_graph(&mut self, point: &Vec2D<f32>, scale:usize, color: u32, offset: usize, border_offsets: [f32;4]) -> Result<(), String>{
-        let h =self.h; let w = self.w;
+    pub fn plot_on_graph(&mut self, point: &Vec2D<f32>, scale:usize, color: u32) -> Result<(), String>{
+        let offset = self.settings.axis_offset;
+        let border_offsets = self.settings.get_border_offsets();
+
+        let h =self.ctx.h; let w = self.ctx.w;
         let new_x = Self::to_window_space(h, w, false, point.x, border_offsets, offset);
         let new_y = Self::to_window_space(h, w, true, point.y, border_offsets, offset);
         
-        self.draw_scaled_pixel(new_x, new_y, scale, color)
-
+        self.ctx.draw_scaled_pixel(new_x, new_y, scale, color)
     }
 
-    pub fn plot_dataset(&mut self, points: &Vec<Vec<f32>>, scale: usize, color: u32, offset: usize, border_offsets: [f32;4] ) {
+    pub fn plot_dataset(&mut self, points: &Vec<Vec<f32>>, scale: usize, color: u32) {
         for point in points {
             let point = Vec2D::new(point[0] as f32, point[1] as f32);
-            self.plot_on_graph(&point, scale, color, offset, border_offsets).unwrap();
+            self.plot_on_graph(&point, scale, color).unwrap();
         }
     }
 }
+//*----------------------------------------- */
+//*----------------------------------------- */
+//*----------------------------------------- */
 
 
 
@@ -412,9 +455,13 @@ impl Hex {
     pub fn from_word(color: &str) -> u32 {
         match color {
             "white" => 0xffffff,
-            "red" => 0xff0000,
             "grey" => 0xd1d1d1,
+
+            "red" => 0xff0000,
             "blue" => 0x4328ed,
+            "green" => 0x008000,
+
+            
             "black" | _ => 0x000000,
             
         }

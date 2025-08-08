@@ -2,7 +2,7 @@
 extern crate bml_grapher;
 use rand::{rng, Rng};
 
-use bml_grapher::{Rgba, SnorfWindow, math::Vec2D, Ctx};
+use bml_grapher::{math::Vec2D, Ctx, GraphCtx, GraphSettings, Rgba, SnorfWindow};
 
 const WIDTH: usize = 720; // 480
 const HEIGHT: usize = 540; // 540
@@ -50,13 +50,13 @@ impl Node {
 }
 
 
-fn hill_climbing<F: Fn(f32) -> f32>(window: &mut SnorfWindow, ctx: &mut Ctx, offset:usize, border_offsets: [f32;4],start_node: Node, f: F) -> Node  {
+fn hill_climbing<F: Fn(f32) -> f32>(window: &mut SnorfWindow, ctx: &mut GraphCtx, offset:usize, border_offsets: [f32;4],start_node: Node, f: F) -> Node  {
     let mut current = start_node;
 
     loop {
         // ---------------- Display stuff
         ctx.plot_on_graph(&Vec2D::new(current.x, f(current.x)), 
-            5, BLUE, offset, border_offsets);
+            5, BLUE) ;
 
         std::thread::sleep(std::time::Duration::from_millis(500));
         println!("({},{})", current.x, f(current.x));
@@ -69,10 +69,10 @@ fn hill_climbing<F: Fn(f32) -> f32>(window: &mut SnorfWindow, ctx: &mut Ctx, off
         
         if f(best_neighbor.x) <= f(current.x) {
             ctx.plot_on_graph(&Vec2D::new(current.x, f(current.x)), 
-            5, GREEN, offset, border_offsets);
+            5, GREEN);
             return current
         }
-        window.update(&ctx).unwrap();
+        window.update(&ctx.ctx).unwrap();
 
 
         current = best_neighbor;
@@ -84,7 +84,7 @@ fn hill_climbing<F: Fn(f32) -> f32>(window: &mut SnorfWindow, ctx: &mut Ctx, off
 
 
 // Make sure the evaluation function is minimal when out of bounds
-fn simulated_annealing<F: Fn(f32) -> f32>(window: &mut SnorfWindow, ctx: &mut Ctx, offset:usize, border_offsets: [f32;4],start_node: Node, f: F) -> Node  {
+fn simulated_annealing<F: Fn(f32) -> f32>(window: &mut SnorfWindow, ctx: &mut GraphCtx,start_node: Node, f: F) -> Node  {
     let mut current = start_node;
     
     //? Shedule determines the value of temperature T as a function of time
@@ -95,7 +95,7 @@ fn simulated_annealing<F: Fn(f32) -> f32>(window: &mut SnorfWindow, ctx: &mut Ct
     loop {
         // ---------------- Display stuff
         ctx.plot_on_graph(&Vec2D::new(current.x, f(current.x)), 
-            5, BLUE, offset, border_offsets);
+            5, BLUE);
 
         std::thread::sleep(std::time::Duration::from_millis(100));
         //------------------
@@ -137,7 +137,7 @@ fn simulated_annealing<F: Fn(f32) -> f32>(window: &mut SnorfWindow, ctx: &mut Ct
 
         t += 0.5;
 
-        window.update(&ctx).unwrap();
+        window.update(&ctx.ctx).unwrap();
 
     }
 
@@ -162,6 +162,9 @@ fn main() {
     let min_ynum = 0.0; let max_ynum = 10.0;
     let border_offsets = [min_xnum,max_xnum,min_ynum,max_ynum];
 
+    let settings = GraphSettings::new(axoff, min_xnum, max_xnum, min_ynum, max_ynum);
+    let mut graph_ctx = GraphCtx::new(&mut ctx, settings);
+
     let f = |x: f32| {
         if x < 0.0|| x > max_xnum {0.0} // partwise function
         else {   0.5* (x-3.0) * (2.0*x-2.0).sin() + 5.0   }
@@ -170,9 +173,9 @@ fn main() {
     // let node = Node::
 
     while window.is_open() {
-        ctx.clear_rect(WHITE);
+        graph_ctx.ctx.clear_rect(WHITE);
 
-        ctx.set_thickness(2);
+        graph_ctx.ctx.set_thickness(2);
 
         // ctx.draw_line(&[50,50].into(), &[100,100].into(), RED);
         // ctx.draw_text(&[200,200].into(), "Yo", 1);
@@ -181,23 +184,22 @@ fn main() {
 
         // ------------------ Draw the plotter
         
-        ctx.draw_axis(true, axoff, axoff /2, 1.0, min_xnum, max_xnum);
-        ctx.draw_axis(false, axoff,  axoff /2, 1.0, min_ynum, max_ynum);
+        graph_ctx.draw_axis(true, 1.0, min_xnum, max_xnum);
+        graph_ctx.draw_axis(false,1.0, min_ynum, max_ynum);
 
-        ctx.draw_graph(f, 1, axoff, 
+        graph_ctx.draw_graph(f, 1, axoff, 
             min_xnum, max_xnum,
             min_ynum, max_ynum, 
             RED
         );
 
-        simulated_annealing(&mut window,&mut ctx, axoff, 
-            [min_xnum,max_xnum,min_ynum,max_ynum],
+        simulated_annealing(&mut window,&mut graph_ctx, 
             Node::new(2.0), f
         );
 
         // ctx.plot_on_graph(Vec2D::new(5.0,5.0), 3, BLUE, axoff, border_offsets);
 
 
-        window.update(&ctx).unwrap();
+        window.update(&graph_ctx.ctx).unwrap();
     }
 }
