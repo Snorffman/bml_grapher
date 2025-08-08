@@ -1,6 +1,6 @@
 [package]
 name = "bml_grapher"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 readme = "README.md"
 
@@ -12,6 +12,7 @@ description = "A library for graphing functions, plots, and other things probabl
 
 [dependencies]
 minifb = "0.27.0"
+hex_color = "3"
 
 # rand crate is needed for the simulated_annealing example
 [dev-dependencies]

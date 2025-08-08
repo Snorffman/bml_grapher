@@ -13,7 +13,6 @@ use std::f32::consts::PI;
 
 
 
-
 /// The Window
 pub struct SnorfWindow {
     window: Window,
@@ -459,12 +458,14 @@ impl Hex {
 
             "red" => 0xff0000,
             "blue" => 0x4328ed,
-            "green" => 0x008000,
+            "green" => 0x5ced73,
 
             
             "black" | _ => 0x000000,
-            
         }
+    }
+    pub fn from_rgb(r:u8,g:u8,b:u8) -> u32 {
+        hex_color::HexColor::rgb(r,g,b).to_u32()
     }
 }
 
