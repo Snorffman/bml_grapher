@@ -1,6 +1,6 @@
 //######################################### TEXT ############################# needs its own file, it's huge
-const OFF_COLOR: u32 =  0xFFFFFFFF;
-const ON_COLOR: u32 =  0x00000000;
+// const OFF_COLOR: u32 =  0xFFFFFFFF;
+// const ON_COLOR: u32 =  0x00000000;
 
 /// Default texture is the MICROKNIGHT_FONT
 pub struct Text {
@@ -9,30 +9,39 @@ pub struct Text {
     // height: usize,
     scale: usize,
     ignore_off_colors: bool,
+
+    on_color: u32,
+    off_color: u32,
 }
 #[inline(always)]
-fn color_from_bit(bit: u8) -> u32 {
+fn color_from_bit(bit: u8, on_color: u32, off_color: u32) -> u32 {
     if bit == 0 {
-        OFF_COLOR
+        off_color
     } else {
-        ON_COLOR
+        on_color
     }
 }
 impl Text {
     /// If ignore_off colors is on, then we won't draw the background colors for the font
-    pub fn new(width: usize, _height: usize, scale: usize, ignore_off_colors: bool) -> Self {
+    pub fn new(width: usize, _height: usize, scale: usize, ignore_off_colors: bool,  on_off_color: Option<(u32,u32)>) -> Self {
+        let mut on_color:u32 =  0x00000000;
+        let mut off_color:u32 = 0xFFFFFFFF;
+        if let Some((on, off)) = on_off_color {
+            on_color = on; off_color = off;
+        }
+
         // Unpack texture for easier drawing
         let mut texture = Vec::with_capacity(128 * 128);
 
         for t in MICROKNIGHT_FONT {
-            texture.push(color_from_bit((t >> 7) & 1));
-            texture.push(color_from_bit((t >> 6) & 1));
-            texture.push(color_from_bit((t >> 5) & 1));
-            texture.push(color_from_bit((t >> 4) & 1));
-            texture.push(color_from_bit((t >> 3) & 1));
-            texture.push(color_from_bit((t >> 2) & 1));
-            texture.push(color_from_bit((t >> 1) & 1));
-            texture.push(color_from_bit(t & 1));
+            texture.push(color_from_bit((t >> 7) & 1, on_color, off_color));
+            texture.push(color_from_bit((t >> 6) & 1, on_color, off_color));
+            texture.push(color_from_bit((t >> 5) & 1, on_color, off_color));
+            texture.push(color_from_bit((t >> 4) & 1, on_color, off_color));
+            texture.push(color_from_bit((t >> 3) & 1, on_color, off_color));
+            texture.push(color_from_bit((t >> 2) & 1, on_color, off_color));
+            texture.push(color_from_bit((t >> 1) & 1, on_color, off_color));
+            texture.push(color_from_bit(t & 1, on_color, off_color));
         }
 
         Self {
@@ -41,10 +50,13 @@ impl Text {
             // height,
             scale,
             ignore_off_colors,
+            on_color,
+            off_color
         }
     }
 
     pub fn draw(&self, screen: &mut [u32], (mut x, y): (usize, usize), text: &str) {
+
         for c in text.chars() {
             let mut index = c as usize - ' ' as usize;
             if index > MICROKNIGHT_LAYOUT.len() as usize {
@@ -60,7 +72,7 @@ impl Text {
                     let tx = fx / self.scale;
                     let pixel = texture_offset + (ty * 128) + tx;
                     if pixel != 0 {
-                        if !(self.ignore_off_colors==true && self.texture[pixel] == OFF_COLOR) { ////! MY STUFF
+                        if !(self.ignore_off_colors==true && self.texture[pixel] == self.off_color) { ////! MY STUFF
                             screen[((y + fy) * self.width) + fx + x] = self.texture[pixel];
                         }
                     }

@@ -4,23 +4,30 @@
 
 pub mod math;
 pub mod text;
+pub mod graph2d;
 
-use minifb::{Key, Window, WindowOptions};
+pub use minifb::{Key, MouseButton, Window, WindowOptions, MouseMode};
 use math::{invLerp, lerp, Vec2D};
 use text::Text;
 
 use std::f32::consts::PI;
 
 
+// pub enum MouseButton {
+
+// }
+
 
 /// The Window
 pub struct SnorfWindow {
-    window: Window,
+    pub window: Window,
     w : usize, // window width
     h : usize, // window height
 }
 impl SnorfWindow {
     /// Create a SnorfWindow
+    /// 
+    /// By default, window.get_context() will return a Ctx type, use Graph2DCtx for access to extra graphing functionality.
     /// 
     /// Common settings:
     /// borderless, title, resize, scale.
@@ -67,6 +74,18 @@ impl SnorfWindow {
         return self.window.is_open() && !self.window.is_key_down(Key::Escape)
     }
 
+    //* Inputs */
+    /// Returns the mouse position with its y position inverted
+    pub fn get_mouse_pos(&self) -> Option<(f32, f32)>{
+        if let Some( (x,y)) = self.window.get_mouse_pos(MouseMode::Discard) {
+            Some( (x, self.window.get_size().1 as f32 -  y))
+        }else {
+            None
+        }
+    }
+    pub fn get_mouse_down(&self, button: MouseButton ) -> bool {
+        self.window.get_mouse_down(button)
+    }
     //-------------------------------
 
 
@@ -119,9 +138,7 @@ impl Ctx {
 
     /// Draws a pixel, relative to the bottom-left corner of the screen. Color is hexadecimal.
     pub fn draw_pixel(&mut self, x: usize, y: usize, color: u32) -> Result<(), String>{ // color is hexadecimal, dis is more memory efficient
-        
         let len = self.buf.len();
-
 
         if x > self.w || y > self.h  ||  x  >= (y+1) * self.w  || len < (y+1) * self.w {
             Err(format!("Attempted to access ({x},{y}) when dimensions are ({},{})",self.w,self.h))
@@ -148,12 +165,32 @@ impl Ctx {
                 }
             }
         }
-
         if err.is_empty(){ Ok(()) }
         else {Err(err)}
     }
 
+    /// Draws a scaled pixel, while ensuring it is within a defined boundary.
+    pub fn bounded_scaled_pixel(&mut self, x: usize, y:usize, min_x:usize, max_x:usize, min_y:usize, max_y:usize, scale:usize, color:u32) -> Result<(), String>{ 
+        let offset = scale-1;
 
+        if x < offset || y < offset {
+            return Err(String::from("Attempted to draw pixel at negative coordinate" ))
+        }
+
+        let mut err: String= String::new();
+        for _x in (x-offset)..=(x+offset) {
+            for _y in (y-offset)..=(y+offset) {
+                if (x as usize - scale/2 >= min_x && x as usize + scale/2 <= max_x) && (y as usize - scale/2 >= min_y && y as usize + scale/2 <= max_y) {
+                    match self.draw_pixel(_x, _y, color) {
+                        Ok(()) => continue,
+                        Err(e) => {err = e},
+                    }
+                }
+            }
+        }
+        if err.is_empty(){ Ok(()) }
+        else {Err(err)}
+    }
     /// Draws a line, using brezenheimer algorithm for speeeed because it avoids float calculations
     /// 
     /// It's kinda bad at doing thick lines, I don't really know how to do that properly so I used a hacky method.
@@ -219,11 +256,80 @@ impl Ctx {
             let _ = draw_single_line(x0, y0, x1, y1);
         }
 
-        Ok(())
-
-        
+        Ok(())    
     }
 
+    /// Draws a line, using brezenheimer algorithm for speeeed because it avoids float calculations
+    /// 
+    /// It's kinda bad at doing thick lines, I don't really know how to do that properly so I used a hacky method.
+    pub fn bounded_draw_line(&mut self, start: &Vec2D<usize>, end: &Vec2D<usize>, max_x:usize, min_x:usize, max_y:usize, min_y:usize, color: u32) -> Result<(), String> {
+        const PIXEL_SCALE:usize = 1;
+
+        let thickness = self.thickness.clone();
+        let [x0, y0, x1, y1] = [start.x as i32, start.y as i32, end.x as i32, end.y as i32];
+        
+        let mut draw_single_line = |x0: i32, y0: i32, x1: i32, y1: i32| -> Result<(), String> { // x0,y0 is the start position
+            let mut x:i32 = x0; let mut y:i32 = y0 as i32;
+            let dx = (x1 - x0).abs();   let sx = if x0<x1{1} else{-1}; // how it increments
+            let dy = - (y1 - y0).abs(); let sy = if y0<y1{1} else{-1};
+            let mut error = dx+dy;
+    
+            loop {
+                if x > 0 && y > 0 {
+                    let _ = self.bounded_scaled_pixel(x as usize, y as usize, min_x, max_x, min_y, max_y, PIXEL_SCALE, color);
+                }
+                if x==x1 && y==y1 {break}
+                let e2 = 2*error;
+    
+                if e2 >= dy {
+                    if x==x1{break}
+                    error = error + dy;
+                    x+=sx;
+                }
+                if e2 <= dx {
+                    if y==y1{break}
+                    error = error + dx;
+                    y+=sy;
+                }
+            }
+            Ok(())
+        };
+
+        // Thicken up the line
+        if thickness > 1 {
+            // Difference vector, with magnitude 0.5
+            let norm: Vec2D<f32> = Vec2D::new((x1-x0) as f32, (y1-y0) as f32).rotate(PI/2.0);
+
+            let mut norm_size = 0.5;
+            
+            let start = Vec2D::new(x0 as f32, y0 as f32);
+            let end = Vec2D::new(x1 as f32, y1 as f32);
+
+            let _ = draw_single_line(x0, y0, x1, y1);
+            for _ in 1..thickness {
+                let norm_scaled = norm.with_magnitude(norm_size);
+                let start_1 = start.add_vec(&norm_scaled);
+                let start_2 = start.sub_vec(&norm_scaled);
+
+                let end_1 = end.add_vec(&norm_scaled);
+                let end_2 = end.sub_vec(&norm_scaled);
+
+                let _ = draw_single_line(start_1.x as i32, start_1.y as i32, end_1.x as i32, end_1.y as i32);
+                let _ = draw_single_line(start_2.x as i32, start_2.y as i32, end_2.x as i32, end_2.y as i32);
+
+
+                norm_size += 0.5;
+            }
+        }else {
+            let _ = draw_single_line(x0, y0, x1, y1);
+        }
+
+        Ok(())   
+    }
+
+
+
+    // Draws a rectangle with pos being the bottom left corner of the rectangle.
     pub fn rect(&mut self, pos: &Vec2D<usize>, width: usize, height: usize, color: u32) {
         let sw:&Vec2D<usize> = pos; 
         let se:&Vec2D<usize> = &[pos.x+width, pos.y].into(); // south-east
@@ -236,10 +342,54 @@ impl Ctx {
         self.draw_line(nw, sw, color);
     }
 
-
-    pub fn draw_text(&mut self, pos: &Vec2D<usize>, text: &str, scale:usize) {
-        let text_obj = Text::new(self.w, self.h, scale, true);
+    /// on_off_color specifies the color of the text
+    pub fn draw_text(&mut self, pos: &Vec2D<usize>, text: &str, scale:usize, on_off_color: Option<(u32,u32)> ) {
+        let text_obj = Text::new(self.w, self.h, scale, true, on_off_color);
         text_obj.draw(&mut self.buf, (pos.x, self.h-pos.y), text);
+    }
+
+    //---------- BresenCircles -----------
+    pub fn circle_bres(&mut self, xc: i32, yc: i32, r: i32, color: u32) {
+        let mut draw_circle = |xc: i32, yc:i32, x:i32,y:i32|  {
+            self.draw_scaled_pixel((xc+x) as usize, (yc+y) as usize, self.thickness, color);
+            self.draw_scaled_pixel((xc-x) as usize, (yc+y) as usize, self.thickness, color);
+
+            self.draw_scaled_pixel((xc+x) as usize, (yc-y) as usize, self.thickness, color);
+            self.draw_scaled_pixel((xc-x) as usize, (yc-y) as usize, self.thickness, color);
+
+            self.draw_scaled_pixel((xc+y) as usize, (yc+x) as usize, self.thickness, color);
+            self.draw_scaled_pixel((xc-y) as usize, (yc+x) as usize, self.thickness, color);
+
+            self.draw_scaled_pixel((xc+y) as usize, (yc-x) as usize, self.thickness, color);
+            self.draw_scaled_pixel((xc-y) as usize, (yc-x) as usize, self.thickness, color);            
+        };
+        let mut x = 0; let mut y = r;
+        let mut d = 3 - 2*r;
+
+        draw_circle(xc,yc,x,y);
+        while y >= x {
+            // for each pixel we'll draw all 8 pixel
+            x += 1;
+            // Check for decision parameter and correspondingle update d,x,y
+            if d > 0 {
+                y -= 1;
+                d = d + 4*(x-y) +10;
+            }else {
+                d = d + 4*x + 6;
+            }
+            draw_circle(xc,yc,x,y);
+        }
+    }
+
+    pub fn fill_circle_bres(&mut self, xc: i32, yc: i32, r:i32, color: u32) {
+        for x in -r .. r {
+            let height = f32::floor(((r*r - x*x) as f32).sqrt() ) as i32;
+            for y in -height .. height {
+                if x+xc >= 0 && y+yc >= 0 {
+                    self.draw_pixel((x+xc) as usize, (y+yc) as usize, color);
+                }
+            }
+        }
     }
 }
 
@@ -298,7 +448,7 @@ impl<'a> GraphCtx<'a> {
                     self.ctx.draw_line(&text_pos, &Vec2D::new(w-offset, text_pos.y), Hex::from_word("grey"));
                 }
                 
-                self.ctx.draw_text(&text_pos, &curr_num.to_string(), 1);
+                self.ctx.draw_text(&text_pos, &curr_num.to_string(), 1, None);
 
                 curr_num += step;
             }
@@ -306,7 +456,7 @@ impl<'a> GraphCtx<'a> {
             // Y axis
             self.ctx.draw_line(&Vec2D::new(offset,offset), &end_point, 0x000000);
             //  Y text
-            self.ctx.draw_text(&[offset/2,h-offset/2].into(), "Y", 1);
+            self.ctx.draw_text(&[offset/2,h-offset/2].into(), "Y", 1, None);
         
         }else {
             let pix_step =  (step * (w-2*offset) as f32 / (max_num - min_num))  as usize; 
@@ -318,14 +468,14 @@ impl<'a> GraphCtx<'a> {
                 if x > offset {
                     self.ctx.draw_line(&text_pos, &Vec2D::new(text_pos.x, h-offset), Hex::from_word("grey"));
                 }
-                self.ctx.draw_text(&text_pos, &curr_num.to_string(), 1);
+                self.ctx.draw_text(&text_pos, &curr_num.to_string(), 1, None);
                 
                 curr_num += step;
             }
             // X axis
             self.ctx.draw_line(&Vec2D::new(offset,offset), &Vec2D::new(w-offset, offset), 0x000000);
             // X text
-            self.ctx.draw_text(&[w-offset/2,offset].into(), "X", 1);
+            self.ctx.draw_text(&[w-offset/2,offset].into(), "X", 1, None);
         }
     }
 
@@ -394,7 +544,7 @@ impl<'a> GraphCtx<'a> {
                 let point = Vec2D::new(wx as isize, wy as isize);
 
                 if let Some(pp) = &prev_point {
-                    if point.distance(pp) > 2 {
+                    if point.distance_squared(pp)  > 2 { ////! PROBABLY SUPER WRONG BECAUSE I THOUGHT IT WAS THE NORMAL DISTANCE
                         let prev_thickness = self.ctx.thickness;
                         self.ctx.set_thickness(prev_thickness *2);
                         self.ctx.draw_line(&Vec2D::new(pp.x as usize, pp.y as usize), &Vec2D::new(point.x as usize, point.y as usize), color);
@@ -465,7 +615,7 @@ impl Hex {
         }
     }
     pub fn from_rgb(r:u8,g:u8,b:u8) -> u32 {
-        hex_color::HexColor::rgb(r,g,b).to_u32()
+        hex_color::HexColor::rgb(r,g,b).to_u24()
     }
 }
 

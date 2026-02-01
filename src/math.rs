@@ -2,7 +2,7 @@
 // pub trait VectorElement : Sized+Clone+Copy {}
 
 use std::ops::{Add, Mul, Sub};
-
+// use std::ops: 
 //~~~~~~~~~~~~~~~~~ .Math
 /// A vector with two dimensions.
 #[derive(Clone, Debug)] // #[derive(Clone, Copy)]
@@ -26,13 +26,13 @@ impl<T: Copy+ Sub<Output=T> + Add<Output=T> + Mul<Output=T> > Vec2D<T> {
         Vec2D::new(s*self.x, s*self.y)
     }
 
-    pub fn magnitude(&self) -> T {
+    pub fn magnitude_squared(&self) -> T {
         self.x*self.x + self.y*self.y
+    }    
+    pub fn distance_squared(&self, v2: &Vec2D<T>) ->T {
+        self.sub_vec(v2).magnitude_squared()
     }
 
-    pub fn distance(&self, v2: &Vec2D<T>) -> T {
-        self.sub_vec(v2).magnitude()
-    }
     // Dot product
     pub fn dot(&self, v2: &Vec2D<T>) -> T {
         self.x * v2.x + self.y*v2.y
@@ -44,6 +44,11 @@ impl Vec2D<f32> {  // Bonus functions for real numbers
         let len = if len == 0.0 {1.0} else {len}; // Prevent division by 0
         Vec2D::new(self.x/len, self.y/len)
     }
+
+    pub fn magnitude(&self) -> f32 {
+        (self.x*self.x + self.y*self.y).sqrt()
+    }    
+
     pub fn with_magnitude(&self, magnitude: f32) -> Vec2D<f32> {
         let len = (self.x*self.x + self.y*self.y).sqrt();
         Vec2D::new(self.x*magnitude / len, self.y*magnitude / len)
@@ -58,6 +63,7 @@ impl Vec2D<f32> {  // Bonus functions for real numbers
 
     pub fn usize(&self) -> Vec2D<usize> {
         Vec2D::new(self.x as usize, self.y as usize)
+        
     }
     
 }
@@ -99,11 +105,18 @@ impl<T: Copy> From<Vec<T>> for Vec2D<T> {
 pub fn lerp(a: f32,b:f32 ,t: f32) -> f32  {
     a + (b-a)*t
 }
+pub fn vec_lerp(a: &Vec2D<f32>, b: &Vec2D<f32>, t: f32) -> Vec2D<f32> {
+    Vec2D::new(
+        lerp(a.x, b.x, t),
+        lerp(a.y, b.y, t)
+    )
+} 
 
 // c= a + t(b-a)
 pub fn invLerp(a: f32, b: f32, c: f32) -> f32 {
     (c-a)/(b-a)
 }
+
 
 
 
